@@ -1,0 +1,5 @@
+I have the output file "KPI Automation with summary files update v3.py".
+from these use "ABM" named sheet, on this sheet i want consolidated report for each unique ABM Name - you will find
+ABM name in header named "ABM-Name" column.
+the consolidated ouptut file should contain the specified mentioned columns - "Call-Days", "Actual-DR-Calls", "Doctor-Call-Avg",
+"2PC-Freq-Cov-%", "Total-DR-Cov-%". optional - use the output template in the "manager_summary.xlsx".
