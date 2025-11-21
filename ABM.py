@@ -41,11 +41,18 @@ df_abm = df_abm[df_abm[abm_name_col].notna()]
 df_abm = df_abm[df_abm[abm_name_col].astype(str).str.strip() != '']
 df_abm.rename(columns={abm_name_col: 'ABM Name'}, inplace=True)
 
-# Normalize ABM Name and Month Start for matching
+# Normalize ABM Name
 df_abm['ABM Name'] = df_abm['ABM Name'].astype(str).str.strip().str.lower()
+
 if 'Month Start' not in df_abm.columns:
     raise ValueError("ABM data must contain 'Month Start' column")
-df_abm['Month Start'] = df_abm['Month Start'].astype(str).str.strip()
+
+# ⭐ FIX: Convert Month Start to consistent format
+df_abm['Month Start'] = pd.to_datetime(df_abm['Month Start'], errors='coerce')
+df_abm['Month Start Formatted'] = df_abm['Month Start'].dt.strftime("%b'%y")  # e.g., Jan'25
+
+# Debug: Print unique months in ABM data
+print(f"\n📅 Unique months in ABM data: {df_abm['Month Start Formatted'].unique()}")
 
 # =========================
 # STEP 2: Read report.csv and TBM.csv
@@ -65,6 +72,8 @@ except UnicodeDecodeError:
 tbm_names = tbm_df.iloc[:, 0].dropna().astype(str).tolist()
 tbm_names_lower = [tbm.strip().lower() for tbm in tbm_names]
 
+print(f"\n👥 Total TBMs in reference list: {len(tbm_names_lower)}")
+
 # Validate report.csv columns
 required_cols = ['User: Full Name', 'Work With', 'Date']
 for col in required_cols:
@@ -80,13 +89,20 @@ report_df['Date'] = pd.to_datetime(report_df['Date'], format='%d-%m-%y', errors=
 # Extract month-year in format Jan'25
 report_df['Month'] = report_df['Date'].dt.strftime("%b'%y")  # e.g., Jan'25
 
+# Debug: Print unique months in report data
+print(f"📅 Unique months in report.csv: {report_df['Month'].unique()}")
+
 # =========================
-# STEP 3: Reliable TBM count per row
+# STEP 3: Reliable TBM count per row with DEBUGGING
 # =========================
 def count_tbms_for_row(abm_name, month):
     # Filter report for ABM and month
     abm_rows = report_df[(report_df['User: Full Name'] == abm_name) &
                           (report_df['Month'] == month)]
+    
+    if abm_rows.empty:
+        return 0
+    
     tbm_worked = set()
     for val in abm_rows['Work With'].dropna():
         # Split by comma, normalize each name
@@ -94,13 +110,24 @@ def count_tbms_for_row(abm_name, month):
         for name in names:
             if name in tbm_names_lower:
                 tbm_worked.add(name)
+    
     return len(tbm_worked)
 
-# Apply logic row-wise
+# Apply logic row-wise with progress tracking
+print("\n🔍 Calculating TBM counts for each ABM-Month combination...")
 df_abm['No. of TBMs Worked'] = df_abm.apply(
-    lambda row: count_tbms_for_row(row['ABM Name'], row['Month Start']),
+    lambda row: count_tbms_for_row(row['ABM Name'], row['Month Start Formatted']),
     axis=1
 )
+
+# Debug: Show sample results
+print("\n📊 Sample TBM count results:")
+print(df_abm[['ABM Name', 'Month Start Formatted', 'No. of TBMs Worked']].head(10))
+
+# ⭐ Additional validation: Show counts per ABM per month
+print("\n🔎 TBM counts by ABM and Month:")
+summary = df_abm.groupby(['ABM Name', 'Month Start Formatted'])['No. of TBMs Worked'].sum().reset_index()
+print(summary)
 
 # =========================
 # STEP 4: Rename headers and save consolidated summary
@@ -114,14 +141,14 @@ rename_headers = {
 
 df_abm.rename(columns={col: rename_headers[col] for col in rename_headers if col in df_abm.columns}, inplace=True)
 
-print("Saving consolidated summary...")
+print("\n💾 Saving consolidated summary...")
 df_abm.to_excel(os.path.join(working_folder, output_file), index=False)
 print(f"✓ Consolidated summary saved to: {output_file}")
 
 # =========================
 # STEP 5: Generate reports using template from consolidated file
 # =========================
-print("Generating reports using template...")
+print("\n📝 Generating reports using template...")
 
 # Row mapping based on template
 row_map = {
@@ -179,5 +206,5 @@ for abm_name, group_df in df_abm.groupby('ABM Name'):
     report_file_path = os.path.join(report_output_folder, f"{abm_name}_report.xlsx")
     wb.save(report_file_path)
 
-print("✅ Reports created using template with correct layout and month-wise TBM values.")
+print("\n✅ Reports created using template with correct layout and month-wise TBM values.")
 print("\n🎯 END-TO-END PROCESS COMPLETE!")
